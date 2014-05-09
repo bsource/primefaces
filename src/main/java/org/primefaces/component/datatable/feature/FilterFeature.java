@@ -16,37 +16,47 @@
 package org.primefaces.component.datatable.feature;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import javax.el.ELContext;
 import javax.el.ValueExpression;
 import javax.faces.FacesException;
-import org.primefaces.component.api.UIColumn;
 import javax.faces.component.UIComponent;
 import javax.faces.component.UINamingContainer;
 import javax.faces.context.FacesContext;
+
 import org.primefaces.component.api.DynamicColumn;
+import org.primefaces.component.api.UIColumn;
 import org.primefaces.component.column.Column;
 import org.primefaces.component.columngroup.ColumnGroup;
 import org.primefaces.component.datatable.DataTable;
 import org.primefaces.component.datatable.DataTableRenderer;
 import org.primefaces.component.row.Row;
 import org.primefaces.context.RequestContext;
-import org.primefaces.model.filter.*;
+import org.primefaces.model.filter.ContainsFilterConstraint;
+import org.primefaces.model.filter.EndsWithFilterConstraint;
+import org.primefaces.model.filter.ExactFilterConstraint;
+import org.primefaces.model.filter.FilterConstraint;
+import org.primefaces.model.filter.StartsWithFilterConstraint;
 import org.primefaces.util.ComponentUtils;
 
 public class FilterFeature implements DataTableFeature {
-    
+
     private final static Logger logger = Logger.getLogger(DataTable.class.getName());
-    
+
     private final static String STARTS_WITH_MATCH_MODE = "startsWith";
     private final static String ENDS_WITH_MATCH_MODE = "endsWith";
     private final static String CONTAINS_MATCH_MODE = "contains";
     private final static String EXACT_MATCH_MODE = "exact";
-    
+
     final static Map<String,FilterConstraint> FILTER_CONSTRAINTS;
-    
+
     static {
         FILTER_CONSTRAINTS = new HashMap<String,FilterConstraint>();
         FILTER_CONSTRAINTS.put(STARTS_WITH_MATCH_MODE, new StartsWithFilterConstraint());
@@ -54,7 +64,7 @@ public class FilterFeature implements DataTableFeature {
         FILTER_CONSTRAINTS.put(CONTAINS_MATCH_MODE, new ContainsFilterConstraint());
         FILTER_CONSTRAINTS.put(EXACT_MATCH_MODE, new ExactFilterConstraint());
     }
-    
+
     private boolean isFilterRequest(FacesContext context, DataTable table) {
         return context.getExternalContext().getRequestParameterMap().containsKey(table.getClientId(context) + "_filtering");
     }
@@ -62,7 +72,7 @@ public class FilterFeature implements DataTableFeature {
     public boolean shouldDecode(FacesContext context, DataTable table) {
         return isFilterRequest(context, table);
     }
-    
+
     public boolean shouldEncode(FacesContext context, DataTable table) {
         return isFilterRequest(context, table);
     }
@@ -74,35 +84,35 @@ public class FilterFeature implements DataTableFeature {
         table.setFilters(filterParameterMap);
         table.setFilterMetadata(filterMetadata);
     }
-            
+
     public void encode(FacesContext context, DataTableRenderer renderer, DataTable table) throws IOException {
         //reset state
         updateFilteredValue(context, table, null);
         table.setFirst(0);
         table.setRowIndex(-1);
-        
+
         if(table.isLazy()) {
             table.loadLazyData();
         }
         else {
             String globalFilterParam = table.getClientId(context) + UINamingContainer.getSeparatorChar(context) + "globalFilter";
             filter(context, table, table.getFilterMetadata(), globalFilterParam);
-            
+
             //sort new filtered data to restore sort state
             boolean sorted = (table.getValueExpression("sortBy") != null || table.getSortBy() != null);
             if(sorted) {
                 SortFeature sortFeature = (SortFeature) table.getFeature(DataTableFeatureKey.SORT);
-                
+
                 if(table.isMultiSort())
                     sortFeature.multiSort(context, table);
                 else
                     sortFeature.singleSort(context, table);
             }
         }
-                
+
         renderer.encodeTbody(context, table, true);
     }
-    
+
     private void filter(FacesContext context, DataTable table, List<FilterMeta> filterMetadata, String globalFilterParam) {
         Map<String,String> params = context.getExternalContext().getRequestParameterMap();
         List filteredData = new ArrayList();
@@ -110,7 +120,7 @@ public class FilterFeature implements DataTableFeature {
         Locale filterLocale = resolveFilterLocale(context, table);
         String globalFilter = hasGlobalFilter ? params.get(globalFilterParam).toLowerCase(filterLocale) : null;
         ELContext elContext = context.getELContext();
-        
+
         for(int i = 0; i < table.getRowCount(); i++) {
             table.setRowIndex(i);
             boolean localMatch = true;
@@ -121,11 +131,11 @@ public class FilterFeature implements DataTableFeature {
                 UIColumn column = filterMeta.getColumn();
                 ValueExpression filterByVE = filterMeta.getFilterByVE();
                 String filterParamValue = params.containsKey(filterParam) ? params.get(filterParam).toLowerCase(filterLocale) : null;
-                
+
                 if(column instanceof DynamicColumn) {
                     ((DynamicColumn) column).applyStatelessModel();
                 }
-                
+
                 String columnValue = String.valueOf(filterByVE.getValue(elContext));
                 FilterConstraint filterConstraint = this.getFilterConstraint(column);
 
@@ -167,11 +177,11 @@ public class FilterFeature implements DataTableFeature {
 
         table.setRowIndex(-1);  //reset datamodel
     }
-    
+
     public void updateFilteredValue(FacesContext context, DataTable table, List<?> value) {
         table.setSelectableDataModelWrapper(null);
         ValueExpression ve = table.getValueExpression("filteredValue");
-        
+
         if(ve != null) {
             ve.setValue(context.getELContext(), value);
         }
@@ -181,26 +191,26 @@ public class FilterFeature implements DataTableFeature {
                     + ", for backward compatibility falling back to page viewstate method to keep filteredValue."
                     + " It is highly suggested to use filtering with a filteredValue model reference as viewstate method is deprecated and will be removed in future."
                     , new Object[]{table.getClientId(context)});
-            
+
             }
-            
+
             table.setFilteredValue(value);
         }
     }
-    
+
     public Map<String,String> populateFilterParameterMap(FacesContext context, DataTable table, List<FilterMeta> filterMetadata, String globalFilterParam) {
-        Map<String,String> params = context.getExternalContext().getRequestParameterMap(); 
+        Map<String,String> params = context.getExternalContext().getRequestParameterMap();
         Map<String,String> filterParameterMap = new HashMap<String, String>();
 
         for(FilterMeta filterMeta : filterMetadata) {
             String filterParam = filterMeta.getFilterParam();
             UIColumn column = filterMeta.getColumn();
             String filterValue = params.get(filterParam);
-            
+
             if(!ComponentUtils.isValueBlank(filterValue)) {
                 String filterField = null;
                 ValueExpression filterByVE = column.getValueExpression("filterBy");
-                
+
                 if(column.isDynamic()) {
                     ((DynamicColumn) column).applyStatelessModel();
                     Object filterByProperty = column.getSortBy();
@@ -212,15 +222,21 @@ public class FilterFeature implements DataTableFeature {
 
                 filterParameterMap.put(filterField, filterValue);
             }
+            ValueExpression filterValueVE = column.getValueExpression("filterValue");
+            if (filterValueVE == null) {
+                ((UIComponent)column).getAttributes().put("filterValue", filterValue);
+            } else {
+                filterValueVE.setValue(context.getELContext(), filterValue);
+            }
         }
 
         if(params.containsKey(globalFilterParam)) {
             filterParameterMap.put("globalFilter", params.get(globalFilterParam));
         }
-        
+
         return filterParameterMap;
     }
-    
+
     private List<FilterMeta> createFilterMetaData(FacesContext context, DataTable table) {
         List<FilterMeta> filterMetadata = new ArrayList<FilterMeta>();
         String separator = String.valueOf(UINamingContainer.getSeparatorChar(context));
@@ -238,7 +254,7 @@ public class FilterFeature implements DataTableFeature {
                         if(column.isRendered()) {
                             ValueExpression columnFilterByVE = column.getValueExpression("filterBy");
                             Object filterByProperty = column.getFilterBy();
-                            
+
                             if(columnFilterByVE != null || filterByProperty != null) {
                                 ValueExpression filterByVE = (columnFilterByVE != null) ? columnFilterByVE : createFilterByVE(context, var, filterByProperty);
                                 String filterId = column.getClientId(context) + separator + "filter";
@@ -248,12 +264,12 @@ public class FilterFeature implements DataTableFeature {
                     }
                 }
             }
-        } 
+        }
         else {
             for(UIColumn column : table.getColumns()) {
                 ValueExpression columnFilterByVE = column.getValueExpression("filterBy");
                 Object filterByProperty = column.getFilterBy();
-                
+
                 if(columnFilterByVE != null || filterByProperty != null) {
                     if(column instanceof Column) {
                         ValueExpression filterByVE = (columnFilterByVE != null) ? columnFilterByVE : createFilterByVE(context, var, filterByProperty);
@@ -266,14 +282,14 @@ public class FilterFeature implements DataTableFeature {
                         ValueExpression filterByVE = (filterByProperty == null) ? columnFilterByVE : createFilterByVE(context, var, filterByProperty);
                         String filterId = dynamicColumn.getContainerClientId(context) + separator + "filter";
                         filterMetadata.add(new FilterMeta(column, filterByVE, filterId));
-                    }                
+                    }
                 }
             }
         }
 
       return filterMetadata;
    }
-    
+
    private ColumnGroup getColumnGroup(DataTable table, String target) {
         for(UIComponent child : table.getChildren()) {
             if(child instanceof ColumnGroup) {
@@ -289,26 +305,26 @@ public class FilterFeature implements DataTableFeature {
 
         return null;
     }
-   
+
     public FilterConstraint getFilterConstraint(UIColumn column) {
         String filterMatchMode = column.getFilterMatchMode();
         FilterConstraint filterConstraint  = FILTER_CONSTRAINTS.get(filterMatchMode);
-        
-        if(filterConstraint == null) { 
+
+        if(filterConstraint == null) {
             throw new FacesException("Illegal filter match mode:" + filterMatchMode);
         }
 
         return filterConstraint;
     }
-    
+
     private ValueExpression createFilterByVE(FacesContext context, String var, Object filterBy) {
         ELContext elContext = context.getELContext();
         return context.getApplication().getExpressionFactory().createValueExpression(elContext, "#{" + var + "." + filterBy + "}", Object.class);
     }
-    
+
     private Locale resolveFilterLocale(FacesContext context, DataTable table) {
         Object userLocale = table.getFilterLocale();
-        
+
         if(userLocale != null) {
             if(userLocale instanceof String)
                 return ComponentUtils.toLocale((String) userLocale);
@@ -316,14 +332,14 @@ public class FilterFeature implements DataTableFeature {
                 return (java.util.Locale) userLocale;
             else
                 throw new IllegalArgumentException("Type:" + userLocale.getClass() + " is not a valid locale type for datatable:" + table.getClientId(context));
-        } 
+        }
         else {
             return context.getViewRoot().getLocale();
         }
     }
-    
+
     private class FilterMeta {
-        
+
         private UIColumn column;
         private ValueExpression filterByVE;
         private String filterParam;
@@ -344,7 +360,7 @@ public class FilterFeature implements DataTableFeature {
 
         public String getFilterParam() {
             return filterParam;
-        }        
-        
+        }
+
     }
 }
