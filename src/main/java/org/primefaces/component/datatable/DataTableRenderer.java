@@ -16,8 +16,12 @@
 package org.primefaces.component.datatable;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
+
 import javax.el.ELContext;
 import javax.el.MethodExpression;
 import javax.el.ValueExpression;
@@ -26,7 +30,9 @@ import javax.faces.component.UIComponent;
 import javax.faces.component.UINamingContainer;
 import javax.faces.context.FacesContext;
 import javax.faces.context.ResponseWriter;
+import javax.faces.convert.Converter;
 import javax.faces.model.SelectItem;
+
 import org.primefaces.component.api.DynamicColumn;
 import org.primefaces.component.api.UIColumn;
 import org.primefaces.component.column.Column;
@@ -491,30 +497,38 @@ public class DataTableRenderer extends DataRenderer {
             else {
                 ValueExpression filterValueVE = column.getValueExpression("filterValue");
                 if(filterValueVE != null) {
-                    filterValue = (String) filterValueVE.getValue(context.getELContext());
+                    Object convertedValue = filterValueVE.getValue(context.getELContext());
+                    Class<?> converterType = filterValueVE.getType(context.getELContext());
+                    if (converterType != null && converterType != Object.class) {
+                        Converter converter = context.getApplication().createConverter(converterType);
+                        if (converter != null) {
+                            convertedValue = converter.getAsString(context, table, convertedValue);
+                        }
+                    }
+                    filterValue = (String) convertedValue;
                 }
                 else {
                     filterValue = "";
                 }
             }
         }
-        
+
         if(column.getValueExpression("filterOptions") == null) {
             filterStyleClass = filterStyleClass == null ? DataTable.COLUMN_INPUT_FILTER_CLASS : DataTable.COLUMN_INPUT_FILTER_CLASS + " " + filterStyleClass;
-            
+
             writer.startElement("input", null);
             writer.writeAttribute("id", filterId, null);
             writer.writeAttribute("name", filterId, null);
             writer.writeAttribute("class", filterStyleClass, null);
             writer.writeAttribute("value", filterValue , null);
             writer.writeAttribute("autocomplete", "off", null);
-            
+
             if(disableTabbing)
                 writer.writeAttribute("tabindex", "-1", null);
 
             if(column.getFilterStyle() != null)
                 writer.writeAttribute("style", column.getFilterStyle(), null);
-            
+
             if(column.getFilterMaxLength() != Integer.MAX_VALUE)
                 writer.writeAttribute("maxlength", column.getFilterMaxLength(), null);
 
@@ -535,14 +549,21 @@ public class DataTableRenderer extends DataRenderer {
 
             for(SelectItem item : itemsArray) {
                 Object itemValue = item.getValue();
-                
+
                 writer.startElement("option", null);
-                writer.writeAttribute("value", item.getValue(), null);
-                if(itemValue != null && String.valueOf(itemValue).equals(filterValue)) {
+
+                Object convertedValue = item.getValue();
+                if (convertedValue != null) {
+                    Converter converter = context.getApplication().createConverter(convertedValue.getClass());
+                    if (converter != null) {
+                        convertedValue = converter.getAsString(context, table, itemValue);
+                    }
+                }
+                writer.writeAttribute("value", convertedValue, null);
+                if(convertedValue != null && convertedValue.equals(filterValue)) {
                     writer.writeAttribute("selected", "selected", null);
                 }
-                writer.writeText(item.getLabel(), null);
-                writer.endElement("option");
+                writer.writeText(item.getLabel(), null);                writer.endElement("option");
             }
 
             writer.endElement("select");

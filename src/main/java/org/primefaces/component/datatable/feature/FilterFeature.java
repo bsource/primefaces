@@ -30,6 +30,7 @@ import javax.faces.FacesException;
 import javax.faces.component.UIComponent;
 import javax.faces.component.UINamingContainer;
 import javax.faces.context.FacesContext;
+import javax.faces.convert.Converter;
 
 import org.primefaces.component.api.DynamicColumn;
 import org.primefaces.component.api.UIColumn;
@@ -137,6 +138,14 @@ public class FilterFeature implements DataTableFeature {
                 }
 
                 String columnValue = String.valueOf(filterByVE.getValue(elContext));
+                Object convertedValue = filterByVE.getValue(context.getELContext());
+                Class<?> converterType = filterByVE.getType(context.getELContext());
+                if (converterType != null && converterType != Object.class) {
+                    Converter converter = context.getApplication().createConverter(converterType);
+                    if (converter != null) {
+                        columnValue = converter.getAsString(context, table, convertedValue);
+                    }
+                }
                 FilterConstraint filterConstraint = this.getFilterConstraint(column);
 
                 if(hasGlobalFilter && !globalMatch) {
@@ -226,7 +235,15 @@ public class FilterFeature implements DataTableFeature {
             if (filterValueVE == null) {
                 ((UIComponent)column).getAttributes().put("filterValue", filterValue);
             } else {
-                filterValueVE.setValue(context.getELContext(), filterValue);
+                Object convertedValue = filterValue;
+                Class<?> converterType = filterValueVE.getType(context.getELContext());
+                if (converterType != null && converterType != Object.class) {
+                    Converter converter = context.getApplication().createConverter(converterType);
+                    if (converter != null) {
+                        convertedValue = converter.getAsObject(context, table, filterValue);
+                    }
+                }
+                filterValueVE.setValue(context.getELContext(), convertedValue);
             }
         }
 
